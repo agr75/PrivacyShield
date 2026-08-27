@@ -1,0 +1,28 @@
+# Credentials and local configuration — never commit these
+.env
+.env.*
+examples/python/config.py
+
+# Documents downloaded by the examples
+downloads/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Java / Maven
+target/
+*.class
+cp.txt
+
+# Editors
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
