@@ -93,6 +93,11 @@ The cURL examples in this documentation always spell out the complete URL, so yo
 
 Every endpoint requires the `Access-Token` header except authentication, which produces the token.
 
+The same seven endpoints are also available as a machine-readable OpenAPI 3.0.3 specification:
+[`openapi.yaml`](../openapi.yaml). Its `servers` URL carries the `/api/v1` prefix, so the paths
+inside it start after that prefix — the full paths in the table above are what actually travels on
+the wire.
+
 ## Processing is asynchronous
 
 This is the part that shapes your integration:

@@ -89,6 +89,7 @@ For the complete flow — polling with backoff, token renewal, downloading — s
 | [errors.md](docs/errors.md) | Every status code, what to do with it, and the message reference |
 | [limits.md](docs/limits.md) | File sizes and formats, page quota, retention, filename rules |
 | [faq.md](docs/faq.md) | The questions integrations actually run into |
+| [openapi.yaml](openapi.yaml) | The same API as a machine-readable OpenAPI 3.0.3 specification |
 
 ### Endpoint reference
 
@@ -99,6 +100,28 @@ For the complete flow — polling with backoff, token renewal, downloading — s
 | [job-status.md](docs/endpoints/job-status.md) | `GET /api/v1/jobs/status` |
 | [download-results.md](docs/endpoints/download-results.md) | `GET /api/v1/jobs/{jobId}/documents/download` and `GET /api/v1/accounts/documents/pending/download` |
 | [cancel-jobs.md](docs/endpoints/cancel-jobs.md) | `POST /api/v1/flow/{templateId}/job/{jobId}/abort` and `POST /api/v1/flow/{templateId}/abort` |
+
+### OpenAPI specification
+
+[`openapi.yaml`](openapi.yaml) describes the same seven endpoints in OpenAPI 3.0.3, with every
+request and response schema, every documented error message, and the `X-Documents-Metadata` header.
+Use it to generate a client, import the API into a REST tool, or drive a mock server.
+
+```bash
+# render it locally
+npx @redocly/cli preview-docs openapi.yaml
+
+# check it after editing
+npx @redocly/cli lint openapi.yaml
+```
+
+You can also paste it into [editor.swagger.io](https://editor.swagger.io) or import it into Postman
+with *Import → File*.
+
+One thing to know before you copy a path out of it: the `servers` URL already ends in `/api/v1`, so
+the paths inside the specification start after that prefix — `/flow/{templateId}` there is
+`/api/v1/flow/{templateId}` on the wire. The reference pages above spell the full path instead,
+because prose has no server URL to carry it.
 
 ## Examples
 

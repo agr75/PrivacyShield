@@ -1,0 +1,942 @@
+openapi: 3.0.3
+
+info:
+  title: PrivacyShield API
+  version: "1.0.0"
+  description: |
+    PrivacyShield removes sensitive data from documents. You send a PDF, an image or a ZIP archive
+    to a template you configured beforehand, and you get the same document back with the fields that
+    template covers replaced or masked.
+
+    ## Before you start
+
+    Two things cannot be created through this API:
+
+    - **An account.** Its numeric `accountId` and its API key are your credentials, both from the
+      administration panel.
+    - **A template.** The configuration that decides what gets anonymized. Templates are created and
+      edited only in the web interface — there are no endpoints for managing them.
+
+    ## Terminology
+
+    You send documents to a **template**. Its identifier is `templateId` everywhere: in the path, in
+    the job listing, and in error messages. The one exception is the path segment itself, spelled
+    `flow`, an older internal name kept for URL compatibility:
+
+    ```
+    POST /api/v1/flow/789
+              ^^^^ ^^^
+              |    the templateId from the web interface
+              older internal name for the concept, kept in the URL
+    ```
+
+    ## Processing is asynchronous
+
+    Submitting documents returns a `job` identifier immediately. **Nothing has been anonymized at
+    that point.** There are no webhooks: poll `GET /jobs/status` until the job is ready, then
+    download it.
+
+    Two consequences that shape any integration:
+
+    - The access token is valid for **30 minutes**, which a long wait can outlive.
+    - Results are deleted **5 days** after a document finishes. Download and store them yourself.
+
+    ## Reading a download response
+
+    Both download operations answer either with binary content (`200`) or with `204 No Content` when
+    nothing is ready. **`204` is a normal outcome, not an error.** Both carry the
+    `X-Documents-Metadata` header, which is the only per-document report the API offers — read it on
+    every download, including on `204`.
+
+    A successful download also **marks the returned documents as downloaded**. They are not sent
+    again, so persist the bytes before acknowledging them anywhere else.
+
+    ## Errors
+
+    Branch on the HTTP status code. The `message` field is written for humans, is not a stable
+    identifier, and its wording can change.
+
+    | Status | Retry? | What to do |
+    |---|---|---|
+    | 400 | No | The request is wrong or the quota is exhausted. Report the message and stop |
+    | 401 | Once | Get a new token, retry the request once |
+    | 403 / 404 / 410 | No | Configuration or retention problem. Abort |
+    | 500 | Yes | Retry with exponential backoff |
+
+    Full documentation, including the examples this specification's values come from:
+    https://github.com/agr75/PrivacyShield
+  contact:
+    name: PrivacyShield support
+    url: https://privacyshield.fundamentia.com/administration
+  license:
+    name: MIT
+    url: https://github.com/agr75/PrivacyShield/blob/main/LICENSE
+
+externalDocs:
+  description: Integration documentation and runnable Python and Java examples
+  url: https://github.com/agr75/PrivacyShield
+
+servers:
+  - url: https://api.privacyshield.fundamentia.com/api/v1
+    description: |
+      Production. There is no sandbox, and every submission consumes page quota.
+
+      This URL already contains the `/api/v1` prefix, so the paths below start after it:
+      `/flow/{templateId}` here is `https://api.privacyshield.fundamentia.com/api/v1/flow/789` on the
+      wire. The reference pages in the repository spell the full path instead, because they have no
+      server URL to carry the prefix.
+
+tags:
+  - name: Authentication
+    description: Exchange the API key for a short-lived access token
+  - name: Documents
+    description: Send documents to a template
+  - name: Jobs
+    description: Check progress and cancel queued work
+  - name: Downloads
+    description: Retrieve anonymized results
+
+security:
+  - accessToken: []
+
+paths:
+  /auth/{accountId}:
+    post:
+      operationId: authenticate
+      tags: [Authentication]
+      summary: Obtain an access token
+      description: |
+        Exchanges your account's API key for an Access-Token JWT. This is the entry point: the token
+        it returns authorizes every other operation.
+
+        The token expires **30 minutes** after it is issued, and there is no refresh token — you get
+        a new one by calling this operation again. A `403` means the key is wrong; a `404` means the
+        account is wrong. Both look identical from the outside, so check the message.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/accountId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRequest'
+      responses:
+        '200':
+          description: Token issued, valid for 30 minutes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: The body is not valid JSON, or `api_key` is missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                incorrectBody:
+                  summary: Malformed or incomplete body
+                  value:
+                    success: false
+                    message: The body format is incorrect
+        '403':
+          description: The key format is not recognized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidKey:
+                  summary: Wrong API key
+                  value:
+                    success: false
+                    message: Invalid key
+        '404':
+          description: No account has that `accountId`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                accountNotFound:
+                  summary: Wrong accountId
+                  value:
+                    success: false
+                    message: Account not found
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /flow/{templateId}:
+    post:
+      operationId: submitDocuments
+      tags: [Documents]
+      summary: Send documents to a template
+      description: |
+        Sends one or more documents to a template for anonymization and returns the identifier of the
+        job created. Repeat the `file` part once per file; they do not have to be the same type, so
+        PDFs, images and ZIP archives can travel in one request.
+
+        A ZIP is expanded and each file inside becomes its own document in the same job, which is why
+        `docs` can exceed the number of files you uploaded.
+
+        **`200` means accepted, not anonymized.** The documents are queued. Keep the returned `job`
+        value: it is the only handle you get on this submission.
+
+        The 150 MB limit applies to the whole request, not to each file.
+      parameters:
+        - $ref: '#/components/parameters/templateId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: array
+                  description: |
+                    One entry per document. Sent as repeated `multipart` parts all named `file`.
+                    Accepted types: PDF, PNG, JPG, JPEG, TIF, TIFF, and ZIP containing only those.
+                  items:
+                    type: string
+                    format: binary
+            encoding:
+              file:
+                contentType: application/pdf, image/png, image/jpeg, image/tiff, application/zip
+      responses:
+        '200':
+          description: Documents accepted and queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '400':
+          description: |
+            The request cannot be processed. No job is created and no pages are consumed. Do not
+            retry — the same request will fail identically.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                templateDoesNotExist:
+                  summary: No template with that templateId
+                  value:
+                    success: false
+                    message: The template does not exist
+                notEnoughPages:
+                  summary: The template's page quota cannot cover this submission
+                  value:
+                    success: false
+                    message: Not enough pages
+                unsupportedFileType:
+                  summary: Not a PDF, a supported image, or a valid ZIP
+                  value:
+                    success: false
+                    message: Unsupported file type
+                unsupportedFileInsideZip:
+                  summary: The ZIP contains an unsupported file
+                  value:
+                    success: false
+                    message: Unsupported file inside a ZIP
+                invalidFileName:
+                  summary: 'Forbidden characters in the filename: \ / : * ? " < > | or ASCII 0-31'
+                  value:
+                    success: false
+                    message: Invalid file name
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: The template belongs to another account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                accessDenied:
+                  value:
+                    success: false
+                    message: Access denied
+        '404':
+          description: The account encoded in the token no longer exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                accountNotFound:
+                  value:
+                    success: false
+                    message: Account not found
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /flow/{templateId}/job/{jobId}/abort:
+    post:
+      operationId: abortJob
+      tags: [Jobs]
+      summary: Cancel one job
+      description: |
+        Cancels the queued documents of one job. Send it with no body.
+
+        **Only documents that have not started processing are cancelled.** Documents already in the
+        pipeline finish normally and their pages are charged; finished documents are untouched and
+        stay downloadable.
+
+        `abortedDocuments: 0` is a success, not an error: it means every document had already
+        started. Cancelled documents consume no pages.
+      parameters:
+        - $ref: '#/components/parameters/templateId'
+        - $ref: '#/components/parameters/jobId'
+      responses:
+        '200':
+          description: The job's queued documents were cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AbortJobResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedInvalidToken'
+        '403':
+          description: The job belongs to another account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                accessDenied:
+                  value:
+                    success: false
+                    message: Access denied
+        '404':
+          description: No job with that `jobId`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                jobNotFound:
+                  value:
+                    success: false
+                    message: Job not found
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /flow/{templateId}/abort:
+    post:
+      operationId: abortTemplate
+      tags: [Jobs]
+      summary: Cancel every active job of a template
+      description: |
+        Cancels the queued documents of every active job of a template, in one call. Send it with no
+        body.
+
+        **This affects jobs your process did not create**, including submissions made from the web
+        interface. On a shared template, prefer cancelling job by job.
+
+        As with cancelling a single job, only documents that have not started processing are
+        affected.
+      parameters:
+        - $ref: '#/components/parameters/templateId'
+      responses:
+        '200':
+          description: Queued documents were cancelled across the template's active jobs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AbortTemplateResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedInvalidToken'
+        '403':
+          description: The template belongs to another account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                accessDenied:
+                  value:
+                    success: false
+                    message: Access denied
+        '404':
+          description: No template with that `templateId`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                templateNotFound:
+                  value:
+                    success: false
+                    message: Template not found
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /jobs/status:
+    get:
+      operationId: listJobs
+      tags: [Jobs]
+      summary: List jobs and their status
+      description: |
+        Returns the jobs of the authenticated account, newest first, 40 per page. This is the
+        operation to poll while waiting: it changes nothing on the server, unlike the download
+        operations.
+
+        There is no endpoint for a single job — retrieve the listing and find yours in it. A job you
+        just created is on page 0.
+
+        **The listing excludes deleted jobs and jobs that failed completely.** A job that stops
+        appearing will not come back, so treat its disappearance as terminal rather than as a reason
+        to keep polling.
+
+        `completed` means no document is processing right now and at least one has finished. A
+        document that has not started yet leaves the job `completed` while still pending, so download
+        what is ready and check `X-Documents-Metadata` for stragglers.
+      parameters:
+        - $ref: '#/components/parameters/page'
+      responses:
+        '200':
+          description: One page of the job listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /jobs/{jobId}/documents/download:
+    get:
+      operationId: downloadJobDocuments
+      tags: [Downloads]
+      summary: Download the finished documents of one job
+      description: |
+        Returns the finished, not-yet-downloaded documents of one job. One document comes back as a
+        PDF, several as a ZIP — read `Content-Type` instead of assuming, because a multi-document job
+        can hand you a single PDF on one call and a ZIP on the next.
+
+        `X-Documents-Metadata` describes **every** document in the job, including the ones not sent:
+        still pending, still processing, aborted, in error, or already downloaded.
+
+        **This changes server state.** Every document returned is marked as downloaded and will not
+        be sent again, so write the bytes to durable storage before acknowledging them. Do not use
+        this operation as a status check — poll `GET /jobs/status` instead, which consumes nothing.
+      parameters:
+        - $ref: '#/components/parameters/jobId'
+      responses:
+        '200':
+          description: |
+            Documents returned, and now marked as downloaded. `application/pdf` for a single
+            document, `application/zip` for several.
+          headers:
+            Content-Disposition:
+              $ref: '#/components/headers/ContentDisposition'
+            X-Documents-Metadata:
+              $ref: '#/components/headers/XDocumentsMetadata'
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '204':
+          description: |
+            Nothing is ready to download. A normal outcome, not an error. Read
+            `X-Documents-Metadata` to tell "still processing" from "every document failed".
+          headers:
+            X-Documents-Metadata:
+              $ref: '#/components/headers/XDocumentsMetadata'
+        '400':
+          description: '`jobId` is not a valid number'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidJobId:
+                  value:
+                    success: false
+                    message: Invalid jobId
+        '401':
+          $ref: '#/components/responses/UnauthorizedInvalidToken'
+        '403':
+          description: The job belongs to another account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notAccessible:
+                  value:
+                    success: false
+                    message: This resource is not accessible
+        '404':
+          description: No job with that `jobId`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                jobDoesNotExist:
+                  value:
+                    success: false
+                    message: The job do not exist
+        '410':
+          $ref: '#/components/responses/Gone'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /accounts/documents/pending/download:
+    get:
+      operationId: downloadPendingDocuments
+      tags: [Downloads]
+      summary: Download everything pending in the account
+      description: |
+        Returns finished documents that have not been downloaded yet, from any job in the account, in
+        a single ZIP — always a ZIP, even for one document.
+
+        **At most 10 documents per call**, the 10 most recently modified. If more are waiting, call
+        again: the returned documents drop out of the pending set, so each call gives you the next
+        batch. Stop when you get a `204`.
+
+        Documents are marked as downloaded **atomically before the response is sent**, so concurrent
+        callers get disjoint sets rather than duplicates. Several workers can drain the queue in
+        parallel safely.
+
+        Here `X-Documents-Metadata` lists only what this call returned, and each entry carries an
+        extra `jobId` — without it you could not tell which submission a file in the ZIP answers.
+      responses:
+        '200':
+          description: A ZIP of up to 10 documents, now marked as downloaded
+          headers:
+            Content-Disposition:
+              $ref: '#/components/headers/ContentDisposition'
+            X-Documents-Metadata:
+              $ref: '#/components/headers/XDocumentsMetadata'
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '204':
+          description: |
+            Nothing pending anywhere in the account. `X-Documents-Metadata` is an empty array, which
+            is the definitive "nothing is waiting".
+          headers:
+            X-Documents-Metadata:
+              $ref: '#/components/headers/XDocumentsMetadata'
+        '401':
+          $ref: '#/components/responses/UnauthorizedInvalidToken'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+components:
+
+  securitySchemes:
+    accessToken:
+      type: apiKey
+      in: header
+      name: Access-Token
+      description: |
+        The JWT returned by `POST /auth/{accountId}`, valid for 30 minutes. Sent as an `Access-Token`
+        header — this is **not** an `Authorization: Bearer` header.
+
+        The `api_key` itself is not a security scheme here: it travels in the body of the
+        authentication operation and never on a normal request. OpenAPI cannot express a
+        body-carried credential, which is why it appears as a request-body field instead.
+
+  parameters:
+    accountId:
+      name: accountId
+      in: path
+      required: true
+      description: Your account identifier, from the My Account section of the administration panel
+      schema:
+        type: integer
+        format: int64
+        example: 1042
+
+    templateId:
+      name: templateId
+      in: path
+      required: true
+      description: |
+        Identifier of the template. Created and visible in the web interface; the API cannot create
+        one. Note the path segment is spelled `flow` for historical reasons.
+      schema:
+        type: integer
+        format: int64
+        example: 789
+
+    jobId:
+      name: jobId
+      in: path
+      required: true
+      description: Identifier of the job, from the `job` field of a submission
+      schema:
+        type: integer
+        format: int64
+        example: 12345
+
+    page:
+      name: page
+      in: query
+      required: false
+      description: Zero-based page number. The page size is fixed at 40 and cannot be changed.
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+        example: 0
+
+  headers:
+    ContentDisposition:
+      description: |
+        Suggested filename. When the name has non-ASCII characters the server sends both the extended
+        `filename*=UTF-8''...` form (RFC 5987/6266) and a plain `filename="..."` holding an RFC 2047
+        encoded-word. Prefer the extended form; it needs no heuristics.
+      schema:
+        type: string
+        example: attachment; filename="job_12345_documents.zip"
+
+    XDocumentsMetadata:
+      description: |
+        Per-document report, as a JSON array encoded in ASCII on a single line. Parse it as JSON; the
+        element shape is the `DocumentMetadata` schema.
+
+        **Present on `204` responses too**, which is what lets you distinguish "still processing"
+        from "every document failed". It is the only per-document report the API offers, so read it
+        on every download.
+
+        Scope differs between the two download operations: per job it describes *every* document in
+        the job; per account it describes *only* the documents included in the ZIP, each with an
+        extra `jobId`.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/DocumentMetadata'
+          example:
+            - documentId: 98761
+              documentName: contract.pdf
+              status: done
+              completedAt: "2025-06-09T14:31:02"
+              pageCount: 12
+            - documentId: 98763
+              documentName: report.pdf
+              status: pending
+              completedAt: null
+              pageCount: null
+
+  responses:
+    Unauthorized:
+      description: |
+        The `Access-Token` header is missing, or the token expired or failed signature validation.
+        Get a new token and retry the request **once**; a second `401` is a credential problem.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            headerMissing:
+              summary: No Access-Token header was sent
+              value:
+                success: false
+                message: The Access-Token header is missing
+            invalidToken:
+              summary: Expired token or invalid signature
+              value:
+                success: false
+                message: Invalid token
+
+    UnauthorizedInvalidToken:
+      description: |
+        The token expired or failed signature validation. Get a new token and retry the request
+        **once**; a second `401` is a credential problem.
+
+        Only `Invalid token` is documented for this operation. Omitting the header entirely is
+        documented as `The Access-Token header is missing` on the operations that list it.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidToken:
+              summary: Expired token or invalid signature
+              value:
+                success: false
+                message: Invalid token
+
+    Gone:
+      description: |
+        The job was deleted, normally because its documents finished more than 5 days ago. The
+        results are unrecoverable: do not retry and do not re-poll this job.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            jobDeleted:
+              value:
+                success: false
+                message: The job has been deleted
+
+    ServerError:
+      description: Server-side failure. Retry with exponential backoff and a bounded number of attempts.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            unexpected:
+              value:
+                success: false
+                message: An unexpected error has occurred on the server
+
+  schemas:
+
+    AuthRequest:
+      type: object
+      required: [api_key]
+      properties:
+        api_key:
+          type: string
+          description: |
+            Your account's API key, from the Api Key section of the administration panel. It is
+            long-lived and account-wide: keep it out of source control and out of browsers and mobile
+            apps.
+          example: YOUR_API_KEY
+
+    AuthResponse:
+      type: object
+      required: [success, message, Access-Token]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Generated access token
+        Access-Token:
+          type: string
+          description: JWT to send as the `Access-Token` header. Valid for 30 minutes.
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2NvdW50SWQiOjEwNDIsImV4cCI6MTc0OTQ3NTgyNX0.SIGNATURE_TRUNCATED
+
+    UploadResponse:
+      type: object
+      required: [success, message, docs, job]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Documents send succesfully
+        docs:
+          type: integer
+          description: |
+            Number of documents accepted into the job. A ZIP with 3 PDFs reports `3`, not `1`.
+          example: 3
+        job:
+          type: integer
+          format: int64
+          description: |
+            Identifier of the created job. The same value is called `jobId` everywhere else. Persist
+            it: it is the only handle on this submission.
+          example: 12345
+
+    AbortJobResponse:
+      type: object
+      required: [success, message, abortedDocuments]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Documents aborted
+        abortedDocuments:
+          type: integer
+          description: |
+            How many documents actually moved to `aborted`. Zero means every document had already
+            started processing — a success, not an error.
+          example: 2
+
+    AbortTemplateResponse:
+      type: object
+      required: [success, message, abortedJobs, jobs]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Jobs aborted
+        abortedJobs:
+          type: integer
+          description: Number of jobs affected
+          example: 2
+        jobs:
+          type: array
+          description: One entry per affected job
+          items:
+            $ref: '#/components/schemas/AbortedJobEntry'
+
+    AbortedJobEntry:
+      type: object
+      required: [jobId, abortedDocuments]
+      properties:
+        jobId:
+          type: integer
+          format: int64
+          example: 12345
+        abortedDocuments:
+          type: integer
+          example: 2
+
+    JobListResponse:
+      type: object
+      required: [success, message, total, page, limit, jobs]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: OK
+        total:
+          type: integer
+          description: |
+            Total jobs in the account, across all pages. Excludes deleted jobs and jobs that failed
+            completely.
+          example: 45
+        page:
+          type: integer
+          description: The page returned
+          example: 0
+        limit:
+          type: integer
+          description: Results per page. Always 40.
+          example: 40
+        jobs:
+          type: array
+          description: The jobs on this page, newest first
+          items:
+            $ref: '#/components/schemas/Job'
+
+    Job:
+      type: object
+      required: [jobId, templateId, status, createdAt]
+      properties:
+        jobId:
+          type: integer
+          format: int64
+          description: Job identifier — the same value a submission returns as `job`
+          example: 12345
+        templateId:
+          type: integer
+          format: int64
+          description: The template the job belongs to — the same value you sent in the path
+          example: 789
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        createdAt:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$'
+          description: |
+            Creation timestamp, `YYYY-MM-DDThh:mm:ss`. Note there is **no timezone offset**, so this
+            is not an RFC 3339 `date-time`; parse it as a local date-time rather than as an instant.
+          example: "2025-06-09T14:23:45"
+
+    JobStatus:
+      type: string
+      description: |
+        Computed from the job's documents on every request, not stored, so two calls seconds apart
+        can differ.
+
+        | Value | Derived from | Keep polling? |
+        |---|---|---|
+        | `new` | Every document is pending | Yes |
+        | `processing` | At least one document is being processed | Yes |
+        | `completed` | At least one document finished and none is processing | No — download now |
+        | `downloaded` | Every finished document has been downloaded | No |
+        | `cancelled` | Every document is aborted | No |
+      enum: [new, processing, completed, downloaded, cancelled]
+      example: completed
+
+    DocumentStatus:
+      type: string
+      description: |
+        | Value | Meaning |
+        |---|---|
+        | `pending` | Received and queued; nothing has happened to it yet |
+        | `processing` | Somewhere in the anonymization pipeline |
+        | `done` | Anonymized and available for download |
+        | `aborted` | Cancelled before processing started; consumes no pages |
+        | `error` | Processing failed, or the file was rejected — an infected file lands here |
+
+        `done`, `aborted` and `error` are terminal, though a finished document is deleted 5 days
+        after it completes.
+      enum: [pending, processing, done, aborted, error]
+      example: done
+
+    DocumentMetadata:
+      type: object
+      description: |
+        One element of the `X-Documents-Metadata` header. The header itself is a JSON array serialized
+        into a single ASCII line, so parse the header value as JSON and expect these objects.
+      required: [documentId, documentName, status]
+      properties:
+        documentId:
+          type: integer
+          format: int64
+          description: Internal document identifier
+          example: 98761
+        documentName:
+          type: string
+          description: Original filename
+          example: contract.pdf
+        status:
+          $ref: '#/components/schemas/DocumentStatus'
+        completedAt:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$'
+          nullable: true
+          description: |
+            Completion timestamp, `YYYY-MM-DDThh:mm:ss`, or null if the document has not finished.
+            As with `createdAt`, there is **no timezone offset**.
+          example: "2025-06-09T14:31:02"
+        pageCount:
+          type: integer
+          format: int64
+          nullable: true
+          description: Page count, or null if not known yet
+          example: 12
+        jobId:
+          type: integer
+          format: int64
+          description: |
+            **Only present in the account-wide download.** The job the document belongs to. The
+            per-job download omits it, because the job is already in the URL.
+          example: 12345
+
+    ErrorResponse:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          description: |
+            Human-readable description. **Not a stable identifier** — branch on the HTTP status code
+            instead, because this wording can change.
+          example: Invalid token

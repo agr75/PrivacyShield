@@ -36,3 +36,6 @@ First public release: complete documentation and working examples for API v1.
   downloads that never overwrite an existing file.
 - Batch processing examples that classify per-file failures and exit non-zero
   when any file fails.
+- `openapi.yaml`: an OpenAPI 3.0.3 specification of all seven endpoints, with
+  request and response schemas, every documented error message as a named
+  example, and the `X-Documents-Metadata` header. Referenced from the README.

@@ -56,6 +56,22 @@ Doc-only corrections do not need an issue first.
   real JSON example, field table, error table, then cURL, Python and Java calls.
   cURL comes first — it is what people try first.
 
+### Keep `openapi.yaml` in sync
+
+A change to an endpoint touches **two** places: its page under `docs/endpoints/` and
+`openapi.yaml`. A new status code, a renamed field or a changed message has to land in both, or the
+specification starts lying to every generated client.
+
+Validate after editing:
+
+```bash
+npx @redocly/cli lint openapi.yaml
+```
+
+Two conventions in that file worth preserving: paths start after the `/api/v1` prefix, because the
+`servers` URL carries it; and timestamps are typed as a pattern rather than `format: date-time`,
+because the API returns them with no timezone offset and strict RFC 3339 parsers reject them.
+
 ### Terminology
 
 Say **template** in prose. That is what the web interface calls it.
