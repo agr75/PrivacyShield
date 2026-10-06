@@ -4,9 +4,9 @@ info:
   title: PrivacyShield API
   version: "1.0.0"
   description: |
-    PrivacyShield removes sensitive data from documents. You send a PDF, an image or a ZIP archive
-    to a template you configured beforehand, and you get the same document back with the fields that
-    template covers replaced or masked.
+    PrivacyShield removes sensitive data from documents. You send a PDF, an image, a text or CSV
+    file, or a ZIP archive to a template you configured beforehand, and you get the same document
+    back with the fields that template covers replaced or masked.
 
     ## Before you start
 
@@ -179,7 +179,7 @@ paths:
       description: |
         Sends one or more documents to a template for anonymization and returns the identifier of the
         job created. Repeat the `file` part once per file; they do not have to be the same type, so
-        PDFs, images and ZIP archives can travel in one request.
+        PDFs, images, `.txt` and `.csv` files and ZIP archives can travel in one request.
 
         A ZIP is expanded and each file inside becomes its own document in the same job, which is why
         `docs` can exceed the number of files you uploaded.
@@ -202,13 +202,14 @@ paths:
                   type: array
                   description: |
                     One entry per document. Sent as repeated `multipart` parts all named `file`.
-                    Accepted types: PDF, PNG, JPG, JPEG, TIF, TIFF, and ZIP containing only those.
+                    Accepted types: PDF, PNG, JPG, JPEG, TIF, TIFF, TXT, CSV, and ZIP containing only those.
+                    `.txt` and `.csv` count one page per 250 words, rounded up.
                   items:
                     type: string
                     format: binary
             encoding:
               file:
-                contentType: application/pdf, image/png, image/jpeg, image/tiff, application/zip
+                contentType: application/pdf, image/png, image/jpeg, image/tiff, text/plain, text/csv, application/zip
       responses:
         '200':
           description: Documents accepted and queued
@@ -236,7 +237,7 @@ paths:
                     success: false
                     message: Not enough pages
                 unsupportedFileType:
-                  summary: Not a PDF, a supported image, or a valid ZIP
+                  summary: Not a PDF, a supported image, a TXT, a CSV, or a valid ZIP
                   value:
                     success: false
                     message: Unsupported file type
@@ -426,9 +427,9 @@ paths:
       tags: [Downloads]
       summary: Download the finished documents of one job
       description: |
-        Returns the finished, not-yet-downloaded documents of one job. One document comes back as a
-        PDF, several as a ZIP — read `Content-Type` instead of assuming, because a multi-document job
-        can hand you a single PDF on one call and a ZIP on the next.
+        Returns the finished, not-yet-downloaded documents of one job. One document comes back in its
+        own format (PDF, TXT or CSV), several as a ZIP — read `Content-Type` instead of assuming,
+        because a multi-document job can hand you a single file on one call and a ZIP on the next.
 
         `X-Documents-Metadata` describes **every** document in the job, including the ones not sent:
         still pending, still processing, aborted, in error, or already downloaded.
@@ -441,8 +442,8 @@ paths:
       responses:
         '200':
           description: |
-            Documents returned, and now marked as downloaded. `application/pdf` for a single
-            document, `application/zip` for several.
+            Documents returned, and now marked as downloaded. `application/pdf`, `text/plain` or
+            `text/csv` for a single document, `application/zip` for several.
           headers:
             Content-Disposition:
               $ref: '#/components/headers/ContentDisposition'
@@ -453,6 +454,12 @@ paths:
               schema:
                 type: string
                 format: binary
+            text/plain:
+              schema:
+                type: string
+            text/csv:
+              schema:
+                type: string
             application/zip:
               schema:
                 type: string

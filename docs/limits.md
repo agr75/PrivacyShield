@@ -18,7 +18,9 @@
 |---|---|---|
 | PDF | `.pdf` | Processed directly |
 | Image | `.png`, `.jpg`, `.jpeg`, `.tif`, `.tiff` | Converted to PDF automatically |
-| ZIP | `.zip` | Must contain only PDFs and supported images |
+| Text | `.txt` | Anonymized as text and returned as `.txt` |
+| CSV | `.csv` | Anonymized as text and returned as `.csv` |
+| ZIP | `.zip` | Must contain only supported files: PDFs, images, `.txt` and `.csv` |
 
 A ZIP is expanded and each file inside becomes its own document within the same job. One ZIP with five PDFs produces one job with five documents — which is why the upload response returns `docs: 5` for a single uploaded file.
 
@@ -35,6 +37,10 @@ For large batches, send several requests rather than one oversized archive. You 
 Your account holds page quota in two separate modalities, **basic** and **advanced**. Each template is configured against one of them, so **the template you send a document to determines which quota pays for it**. That single sentence covers both halves of how quota works: the pools belong to the account, the choice of pool belongs to the template.
 
 The practical consequence: quota is not one number you can watch. Two templates in the same account can have very different amounts of room left, and a submission that succeeds against template `789` can be rejected against another template with no change on your side. If you route documents across several templates, handle the quota error per template rather than treating it as an account-level outage.
+
+### How text files are counted
+
+`.txt` and `.csv` files have no pages, so they are counted by words: **every 250 words count as one page**, rounded up, with a minimum of one. A 600-word text file costs 3 pages; a 40-word one costs 1. They are charged against the same quota as any other document sent to that template.
 
 A submission that would exceed the remaining quota is rejected before processing:
 

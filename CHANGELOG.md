@@ -4,6 +4,17 @@ All notable changes to this repository are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version refers
 to this documentation, not to the API — the API version is `v1` throughout.
 
+## [1.2.0] - 2026-10-06
+
+### Added
+
+- `.txt` and `.csv` are accepted formats, on their own and inside a ZIP. They
+  are anonymized as text and returned in the same format (`text/plain`,
+  `text/csv`), not converted to PDF.
+- Page quota for text files: every 250 words count as one page, rounded up,
+  with a minimum of one.
+- `openapi.yaml`: `text/plain` and `text/csv` responses on the per-job download.
+
 ## [1.1.0] - 2026-10-06
 
 ### Changed

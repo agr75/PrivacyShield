@@ -21,7 +21,7 @@ Both mark what they return as downloaded. Read [Downloading marks documents as d
 GET /api/v1/jobs/{jobId}/documents/download
 ```
 
-Returns the finished documents of one job. One document comes back as a PDF, several as a ZIP.
+Returns the finished documents of one job. One document comes back in its own format — PDF, `.txt` or `.csv` — and several as a ZIP.
 
 ### Headers
 
@@ -49,11 +49,11 @@ None.
 
 | Response header | Example | Description |
 |---|---|---|
-| `Content-Type` | `application/zip` | `application/pdf` for a single document, `application/zip` for several |
+| `Content-Type` | `application/zip` | `application/pdf`, `text/plain` or `text/csv` for a single document, `application/zip` for several |
 | `Content-Disposition` | `attachment; filename="job_12345_documents.zip"` | Suggested filename |
 | `X-Documents-Metadata` | See [below](#the-x-documents-metadata-header) | Status of **every** document in the job, not just the returned ones |
 
-The body is the raw PDF or ZIP. Do not assume which one you got — read `Content-Type`. A three-document job can hand you a single PDF on one call (one document finished) and a ZIP on the next (the other two finished).
+The body is the raw file or ZIP. Do not assume which one you got — read `Content-Type`. A three-document job can hand you a single file on one call (one document finished) and a ZIP on the next (the other two finished).
 
 ### Success response — nothing available
 
@@ -85,7 +85,7 @@ This is a normal response, not an error. See [Reading a 204](#reading-a-204).
 GET /api/v1/accounts/documents/pending/download
 ```
 
-Returns finished documents that have not been downloaded yet, from any job in the account, in a single ZIP. Useful when you run a collector process, or when you have lost track of job identifiers.
+Returns finished documents that have not been downloaded yet, from any job in the account, in a single ZIP. Text and CSV documents are inside it as `.txt` and `.csv` files. Useful when you run a collector process, or when you have lost track of job identifiers.
 
 ### Headers
 

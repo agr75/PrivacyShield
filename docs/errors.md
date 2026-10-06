@@ -51,7 +51,7 @@ Messages are reproduced exactly as the API returns them. Treat them as diagnosti
 |---|---|---|
 | 400 | `The template does not exist` | No template with that `templateId` |
 | 400 | `Not enough pages` | The submission exceeds the remaining page quota of the target template |
-| 400 | `Unsupported file type` | The file is not a PDF, a supported image, or a ZIP with valid contents |
+| 400 | `Unsupported file type` | The file is not a PDF, a supported image, a `.txt`, a `.csv`, or a ZIP with valid contents |
 | 400 | `Unsupported file inside a ZIP` | The ZIP contains an unsupported file |
 | 400 | `Invalid file name` | The filename contains forbidden characters |
 | 401 | `The Access-Token header is missing` | The header was not sent |

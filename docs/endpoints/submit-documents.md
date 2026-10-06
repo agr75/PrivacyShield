@@ -33,9 +33,9 @@ None.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `file` | File | Yes | A PDF, an image (`.png`, `.jpg`, `.jpeg`, `.tif`, `.tiff`) or a ZIP containing only PDFs and images |
+| `file` | File | Yes | A PDF, an image (`.png`, `.jpg`, `.jpeg`, `.tif`, `.tiff`), a `.txt`, a `.csv`, or a ZIP containing only those |
 
-Images are converted to PDF automatically. A ZIP is expanded and each file inside becomes its own document in the same job.
+Images are converted to PDF automatically. `.txt` and `.csv` files are anonymized as text and come back in their own format; they count one page per 250 words — see [limits.md](../limits.md#how-text-files-are-counted). A ZIP is expanded and each file inside becomes its own document in the same job.
 
 ### Sending several files at once
 
@@ -57,7 +57,7 @@ Content-Type: application/pdf
 
 The response's `docs` field counts every accepted document, and all of them belong to one job.
 
-**The files do not have to be the same type.** You can mix PDFs and images in one request, and you can include a ZIP alongside loose files. Each part is validated on its own.
+**The files do not have to be the same type.** You can mix PDFs, images, `.txt` and `.csv` files in one request, and you can include a ZIP alongside loose files. Each part is validated on its own.
 
 A ZIP achieves the same result — one job, many documents — and is the better choice when the file count is high or the names come from somewhere you do not control, since you validate the archive once instead of building a large multipart body.
 
@@ -97,7 +97,7 @@ It is the only handle you get on this submission. If you lose it you cannot targ
 |---|---|---|---|
 | 400 | `The template does not exist` | No template with that `templateId` | Check the identifier in the web interface. Do not retry |
 | 400 | `Not enough pages` | The template's page quota cannot cover this submission | Business condition. Top up the quota; retrying changes nothing |
-| 400 | `Unsupported file type` | Not a PDF, a supported image, or a valid ZIP | Do not retry. Convert the file first |
+| 400 | `Unsupported file type` | Not a PDF, a supported image, a `.txt`, a `.csv`, or a valid ZIP | Do not retry. Convert the file first |
 | 400 | `Unsupported file inside a ZIP` | The ZIP contains an unsupported file | The whole submission failed. Rebuild the archive |
 | 400 | `Invalid file name` | The filename contains forbidden characters | Sanitize the name — see [limits.md](../limits.md#filenames) |
 | 401 | `The Access-Token header is missing` | Header not sent | Add the header |

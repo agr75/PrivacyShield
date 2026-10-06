@@ -45,7 +45,7 @@ Yes, for the account-wide endpoint. Documents are marked as downloaded atomicall
 
 ## Why did I get a PDF instead of a ZIP?
 
-The per-job download returns `application/pdf` when exactly one document is ready and `application/zip` when several are. Check the `Content-Type` of the response rather than assuming — with a multi-document job you may get a single PDF on one call and a ZIP on the next.
+The per-job download returns a single document in its own format when exactly one is ready — `application/pdf`, `text/plain` for a `.txt` or `text/csv` for a `.csv` — and `application/zip` when several are. Check the `Content-Type` of the response rather than assuming — with a multi-document job you may get a single file on one call and a ZIP on the next.
 
 The account-wide download always returns a ZIP, even for one document.
 
@@ -99,7 +99,7 @@ It is rejected by the scan, never processed, and left in the `error` state. It c
 
 Yes. Repeat the `file` part once per file in the same `multipart/form-data` request. All of them land in one job and `docs` counts them all.
 
-They do not have to be the same type — PDFs and images can travel together in one request. See [submit-documents.md](endpoints/submit-documents.md#sending-several-files-at-once).
+They do not have to be the same type — PDFs, images, `.txt` and `.csv` files can travel together in one request. See [submit-documents.md](endpoints/submit-documents.md#sending-several-files-at-once).
 
 ## Is there a sandbox or test environment?
 

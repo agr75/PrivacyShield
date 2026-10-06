@@ -1,7 +1,7 @@
 # PrivacyShield API
 
-PrivacyShield removes sensitive data from documents. You send a PDF, an image or
-a ZIP archive to a template you configured beforehand, and you get the same
+PrivacyShield removes sensitive data from documents. You send a PDF, an image, a
+text or CSV file, or a ZIP archive to a template you configured beforehand, and you get the same
 document back with the fields that template covers replaced or masked.
 
 This repository is the integration documentation and the working examples. It is

@@ -1,6 +1,6 @@
 # Introduction
 
-PrivacyShield removes sensitive data from documents. You send a PDF, an image or a ZIP archive, and you get the same document back with the fields you configured replaced or masked.
+PrivacyShield removes sensitive data from documents. You send a PDF, an image, a text or CSV file, or a ZIP archive, and you get the same document back with the fields you configured replaced or masked.
 
 What gets anonymized is decided by a **template**: a configuration you build once in the web interface and then reuse for every document you send to it. The API does not change what a template does — it only feeds documents into one.
 
