@@ -71,6 +71,10 @@ The pages are already charged at that point, so a missed download costs you quot
 
 The listing excludes deleted jobs and jobs that failed completely. If a job you are polling for stops appearing, stop polling — it will not come back. Fetch the job's documents once to read `X-Documents-Metadata` and see what happened.
 
+## Is there a rate limit?
+
+Yes. Your account can make 10 requests per 60 seconds, counted across all endpoints. The 11th returns `429`, with no `Retry-After` header and a body that is not the standard `{success, message}` envelope. Wait 60 seconds and retry. Do not use the `5xx` backoff, which retries too soon. See [limits.md](limits.md#rate-limiting).
+
 ## I get `401` in the middle of a long wait
 
 Your token expired. Tokens are valid for 30 minutes and there is no refresh token.

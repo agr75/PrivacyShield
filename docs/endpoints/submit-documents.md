@@ -104,6 +104,7 @@ It is the only handle you get on this submission. If you lose it you cannot targ
 | 401 | `Invalid token` | Token expired or invalid | Get a new token and retry once |
 | 403 | `Access denied` | The template belongs to another account | Configuration problem. Abort |
 | 404 | `Account not found` | The account in the token no longer exists | Configuration problem. Abort |
+| 429 | `Lmite de peticiones comsumidas. Rate limit execeed.` | More than 10 calls from your account in 60 seconds, across all endpoints | Wait 60 seconds, then retry. See [limits.md](../limits.md#rate-limiting) |
 | 500 | `An unexpected error has occurred on the server` | Server-side failure | Retry with exponential backoff |
 
 Three different responses all mean "check your `templateId`": `400 The template does not exist`, `403 Access denied` (it exists but belongs to someone else) and `404 Account not found` (the account in your token is gone).

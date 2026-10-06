@@ -138,6 +138,7 @@ Bound the loop. An account with 40,000 jobs would otherwise turn one lookup into
 |---|---|---|---|
 | 401 | `The Access-Token header is missing` | Header not sent | Add the header |
 | 401 | `Invalid token` | Token expired or invalid | Get a new token and retry once |
+| 429 | `Lmite de peticiones comsumidas. Rate limit execeed.` | More than 10 calls from your account in 60 seconds, across all endpoints | Wait 60 seconds, then retry. See [limits.md](../limits.md#rate-limiting) |
 | 500 | `An unexpected error has occurred on the server` | Server-side failure | Retry with exponential backoff |
 
 There is no `404` here: an account with no jobs returns `200` with `total: 0` and an empty `jobs` array.

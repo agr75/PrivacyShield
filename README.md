@@ -87,7 +87,7 @@ For the complete flow — polling with backoff, token renewal, downloading — s
 | [authentication.md](docs/authentication.md) | API key to access token, the 30-minute expiry, how to refresh |
 | [lifecycle.md](docs/lifecycle.md) | Document and job states, diagrams, when to stop polling |
 | [errors.md](docs/errors.md) | Every status code, what to do with it, and the message reference |
-| [limits.md](docs/limits.md) | File sizes and formats, page quota, retention, filename rules |
+| [limits.md](docs/limits.md) | File sizes and formats, page quota, rate limit, retention, filename rules |
 | [faq.md](docs/faq.md) | The questions integrations actually run into |
 | [openapi.yaml](openapi.yaml) | The same API as a machine-readable OpenAPI 3.0.3 specification |
 

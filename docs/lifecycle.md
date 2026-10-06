@@ -122,13 +122,15 @@ There are no webhooks. Polling is the only mechanism, so poll well.
 
 **Use exponential backoff.** Start at about 2 seconds, double after each attempt, cap at 30 seconds. A job that takes ten minutes should not cost you three hundred requests.
 
+**Stay under the rate limit.** Your account can make 10 requests per 60 seconds across all endpoints, and every status call counts towards that, as do uploads, downloads and token requests. Backoff keeps one job under that. With several jobs in flight, poll the listing once per cycle instead of each job, or the polling alone will hit `429`. See [limits.md](limits.md#rate-limiting).
+
 **Set a global timeout.** Decide up front how long you are willing to wait — 15 minutes is a reasonable default — and fail with a clear message when you reach it. The job keeps processing on the server; you can pick it up later with the account-wide download.
 
 **Refresh the token inside the loop.** A 20-minute wait started with a 25-minute-old token will fail halfway through. Check the token's age before every request. See [authentication.md](authentication.md#refresh-strategy).
 
 **Treat `204` as normal.** On the download endpoint it means "nothing ready yet", not "something went wrong". Never log it as an error.
 
-**Retry `5xx`, not `4xx`.** A `400` will fail identically forever. See [errors.md](errors.md).
+**Retry `5xx`, not `4xx`.** A `400` will fail identically forever. The one `4xx` you retry is `429`, and only after waiting 60 seconds. See [errors.md](errors.md).
 
 ### Which endpoint to poll
 

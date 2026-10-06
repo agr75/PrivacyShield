@@ -36,10 +36,11 @@ info:
     that point.** There are no webhooks: poll `GET /jobs/status` until the job is ready, then
     download it.
 
-    Two consequences that shape any integration:
+    Three consequences that shape any integration:
 
     - The access token is valid for **30 minutes**, which a long wait can outlive.
     - Results are deleted **5 days** after a document finishes. Download and store them yourself.
+    - Each account can make **10 requests per 60 seconds**, counted across all endpoints. Above that it returns `429`.
 
     ## Reading a download response
 
@@ -60,6 +61,7 @@ info:
     |---|---|---|
     | 400 | No | The request is wrong or the quota is exhausted. Report the message and stop |
     | 401 | Once | Get a new token, retry the request once |
+    | 429 | After waiting | Rate limit exceeded. Wait 60 seconds, then retry |
     | 403 / 404 / 410 | No | Configuration or retention problem. Abort |
     | 500 | Yes | Retry with exponential backoff |
 
@@ -164,6 +166,8 @@ paths:
                   value:
                     success: false
                     message: Account not found
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/ServerError'
 
@@ -270,6 +274,8 @@ paths:
                   value:
                     success: false
                     message: Account not found
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/ServerError'
 
@@ -321,6 +327,8 @@ paths:
                   value:
                     success: false
                     message: Job not found
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/ServerError'
 
@@ -371,6 +379,8 @@ paths:
                   value:
                     success: false
                     message: Template not found
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/ServerError'
 
@@ -405,6 +415,8 @@ paths:
                 $ref: '#/components/schemas/JobListResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/ServerError'
 
@@ -489,6 +501,8 @@ paths:
                     message: The job do not exist
         '410':
           $ref: '#/components/responses/Gone'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/ServerError'
 
@@ -533,6 +547,8 @@ paths:
               $ref: '#/components/headers/XDocumentsMetadata'
         '401':
           $ref: '#/components/responses/UnauthorizedInvalidToken'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '500':
           $ref: '#/components/responses/ServerError'
 
@@ -699,6 +715,26 @@ components:
               value:
                 success: false
                 message: An unexpected error has occurred on the server
+
+    TooManyRequests:
+      description: |
+        More than **10 requests in 60 seconds** from the same account, counted across all
+        endpoints. The window is fixed: it opens with the first counted request and resets
+        completely 60 seconds later.
+
+        There is no `Retry-After` header. Wait 60 seconds, then retry; the `5xx` backoff retries
+        too soon and lands in the same window. The body does **not** use the standard
+        `ErrorResponse` envelope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RateLimitError'
+          examples:
+            rateLimitExceeded:
+              value:
+                internalID: 429
+                errorInfo: Lmite de peticiones comsumidas. Rate limit execeed.
+                fecha: "14:31:02 2026/10/06"
 
   schemas:
 
@@ -926,6 +962,24 @@ components:
             **Only present in the account-wide download.** The job the document belongs to. The
             per-job download omits it, because the job is already in the URL.
           example: 12345
+
+    RateLimitError:
+      type: object
+      description: Body of a `429` response. It differs from `ErrorResponse`.
+      required: [internalID, errorInfo, fecha]
+      properties:
+        internalID:
+          type: integer
+          description: Always `429`.
+          example: 429
+        errorInfo:
+          type: string
+          description: Human-readable description. Not a stable identifier.
+          example: Lmite de peticiones comsumidas. Rate limit execeed.
+        fecha:
+          type: string
+          description: Server time of the rejection, formatted `HH:mm:ss yyyy/MM/dd`.
+          example: "14:31:02 2026/10/06"
 
     ErrorResponse:
       type: object

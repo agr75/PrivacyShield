@@ -73,6 +73,7 @@ Compare `abortedDocuments` against the `docs` count from the upload if you need 
 | 401 | `Invalid token` | Token expired or invalid | Get a new token and retry once |
 | 403 | `Access denied` | The job belongs to another account | Configuration problem. Abort |
 | 404 | `Job not found` | No job with that `jobId` | Check the identifier. Abort |
+| 429 | `Lmite de peticiones comsumidas. Rate limit execeed.` | More than 10 calls from your account in 60 seconds, across all endpoints | Wait 60 seconds, then retry. See [limits.md](../limits.md#rate-limiting) |
 | 500 | `An unexpected error has occurred on the server` | Server-side failure | Retry with exponential backoff |
 
 ---
@@ -141,6 +142,7 @@ Fields of each entry:
 | 401 | `Invalid token` | Token expired or invalid | Get a new token and retry once |
 | 403 | `Access denied` | The template belongs to another account | Configuration problem. Abort |
 | 404 | `Template not found` | No template with that `templateId` | Check the identifier. Abort |
+| 429 | `Lmite de peticiones comsumidas. Rate limit execeed.` | More than 10 calls from your account in 60 seconds, across all endpoints | Wait 60 seconds, then retry. See [limits.md](../limits.md#rate-limiting) |
 | 500 | `An unexpected error has occurred on the server` | Server-side failure | Retry with exponential backoff |
 
 Note that a non-existent template is `404 Template not found` here, while sending documents to a non-existent template is [`400 The template does not exist`](submit-documents.md#errors). Same mistake, two different status codes.

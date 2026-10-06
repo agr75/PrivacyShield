@@ -10,6 +10,7 @@
 | Documents per account-wide download | 10 |
 | Jobs per page in the status listing | 40 (fixed) |
 | Access token lifetime | 30 minutes |
+| Request rate | 10 requests per 60 seconds per account, across all endpoints |
 
 ## Accepted file formats
 
@@ -114,16 +115,40 @@ What this means for your integration:
 
 ## Rate limiting
 
-Limits are applied **per request**, not across requests. There is no throttling by request rate and no cap on concurrent requests, so you do not need a retry branch for a throttling status code.
+Your account can make **at most 10 requests per 60 seconds**. There is one counter for the whole account, shared by every endpoint: 6 uploads and 4 status calls in the same minute use up the whole allowance.
 
-What each request is checked against:
+The window is **fixed, not sliding**. It opens with the first request that is counted and resets completely 60 seconds later. Requests are counted before the token is validated, so calls rejected with `401` or `403` use up the allowance too.
+
+The 11th request inside the window is rejected with `429`:
+
+```json
+{
+  "internalID": 429,
+  "errorInfo": "Lmite de peticiones comsumidas. Rate limit execeed.",
+  "fecha": "14:31:02 2026/10/06"
+}
+```
+
+Two things to note about this response:
+
+- **It does not use the usual `{success, message}` shape.** Branch on the status code, not on the body.
+- **There is no `Retry-After` header.** Wait 60 seconds and retry. Do not use the `5xx` backoff: it starts at 2 seconds, so its first retries land in the same window and fail again.
+
+What this means for your integration:
+
+- **Batch uploads.** More than 10 submissions a minute will be rejected. Pace them, or put several files in one request (up to 150 MB) so they become one job.
+- **Polling.** Status calls take from the same budget as your uploads and downloads. With several jobs in flight, poll the listing (`GET /api/v1/jobs/status`) once rather than each job separately, and keep the backoff from [lifecycle.md](lifecycle.md#polling-strategy).
+- **Draining the account-wide download.** Each call returns at most 10 documents, so a large backlog takes more than one window to drain. Wait out the window instead of looping hard.
+
+On top of the rate limit, every request is checked on its own:
 
 | Check | Failure |
 |---|---|
+| Request rate | `429`, above 10 requests per account in 60 seconds |
 | Request size | `400`, above 150 MB |
 | Page quota of the target template | `400 Not enough pages` |
 | File format and filename | `400` |
 
-Still keep the `5xx` backoff from [errors.md](errors.md): the absence of throttling is not a promise that the server always answers. And be reasonable with parallelism — every concurrent upload is competing for the same pipeline and the same quota.
+Keep the `5xx` backoff from [errors.md](errors.md) as well. The service can still fail on a request that is within every limit.
 
 No maximum number of documents per job is specified. In practice a job is bounded by the 150 MB request limit and by the template's quota.

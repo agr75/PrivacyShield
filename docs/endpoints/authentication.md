@@ -65,6 +65,7 @@ Note that the token arrives in a field called `Access-Token` and is sent back in
 | 400 | `The body format is incorrect` | The body is not valid JSON, or `api_key` is missing | Fix the request. Do not retry as-is |
 | 403 | `Invalid key` | The key format is not recognized | Re-copy the key from the administration panel |
 | 404 | `Account not found` | No account has that `accountId` | Check `accountId`. A common mistake is using the template identifier here |
+| 429 | `Lmite de peticiones comsumidas. Rate limit execeed.` | More than 10 calls from your account in 60 seconds, across all endpoints | Wait 60 seconds, then retry. See [limits.md](../limits.md#rate-limiting) |
 | 500 | `An unexpected error has occurred on the server` | Server-side failure | Retry with exponential backoff |
 
 A `403` means the key itself is wrong; a `404` means the account is wrong. The two failures look identical from the outside, so check both values before assuming your credentials were revoked.

@@ -72,6 +72,7 @@ This is a normal response, not an error. See [Reading a 204](#reading-a-204).
 | 403 | `This resource is not accessible` | The job belongs to another account | Configuration problem. Abort |
 | 404 | `The job do not exist` | No job with that `jobId` | Check the identifier. Abort |
 | 410 | `The job has been deleted` | The job was deleted, normally by the [5-day retention window](../limits.md#retention) | Terminal. The result is gone. Do not retry |
+| 429 | `Lmite de peticiones comsumidas. Rate limit execeed.` | More than 10 calls from your account in 60 seconds, across all endpoints | Wait 60 seconds, then retry. See [limits.md](../limits.md#rate-limiting) |
 | 500 | `An unexpected error has occurred on the server` | Server-side failure | Retry with exponential backoff |
 
 `404` and `410` mean different things. A `404` suggests a wrong identifier — check it. A `410` means the identifier was right and you are too late.
@@ -127,6 +128,7 @@ That empty array is the definitive "nothing is waiting anywhere in the account".
 | Status | Message | Cause | What to do |
 |---|---|---|---|
 | 401 | `Invalid token` | Token expired or invalid | Get a new token and retry once |
+| 429 | `Lmite de peticiones comsumidas. Rate limit execeed.` | More than 10 calls from your account in 60 seconds, across all endpoints | Wait 60 seconds, then retry. See [limits.md](../limits.md#rate-limiting) |
 | 500 | `An unexpected error has occurred on the server` | Server-side failure | Retry with exponential backoff |
 
 No `404`: an account with nothing pending returns `204`, not an error.

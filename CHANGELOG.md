@@ -4,6 +4,24 @@ All notable changes to this repository are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version refers
 to this documentation, not to the API — the API version is `v1` throughout.
 
+## [1.1.0] - 2026-10-06
+
+### Changed
+
+- Documented the rate limit: **10 requests per 60 seconds per account, shared
+  across all endpoints**. Above that the API returns `429` with no `Retry-After` header, and
+  its body is not the standard envelope (`internalID`, `errorInfo`, `fecha`).
+  This replaces the statement in 1.0.0 that there was no rate limiting.
+- `limits.md`, `errors.md`, `lifecycle.md`, the FAQ and every endpoint page
+  explain how to handle `429`: wait 60 seconds and retry, never with the `5xx`
+  backoff.
+- `openapi.yaml`: new `TooManyRequests` response and `RateLimitError` schema,
+  added as `429` to all seven operations.
+
+### Known gaps
+
+- The Python and Java example clients do not handle `429` yet.
+
 ## [1.0.0] - 2026-08-27
 
 First public release: complete documentation and working examples for API v1.
